@@ -1,5 +1,4 @@
-from ml import train_model, predict
-from db import get_db
+from TVerificacion import check_torch
 import pandas as pd
 import sys
 import subprocess
@@ -10,5 +9,9 @@ def web():
     print("Web server started.")
     
 if __name__ == "__main__":
+    print("Starting application...")
+    print("Checking PyTorch environment...")
+    check_torch()
     web()
+    # Check PyTorch environment
     # Initialize the database

@@ -7,7 +7,7 @@ class Autoencoder(nn.Module):
     def __init__(self, input_dim): # inicializa el autoencoder con una capa de entrada y una capa de salida
         super().__init__() # llama al constructor de la clase padre nn.Module
         self.encoder = nn.Sequential( # define la arquitectura del autoencoder
-            nn.linear(input_dim, 16), # la primera capa lineal que reduce la dimensionalidad de la entrada
+            nn.Linear(input_dim, 16), # la primera capa lineal que reduce la dimensionalidad de la entrada
             nn.ReLU(), # función de activación ReLU
             nn.Linear(16, 8), # la segunda capa lineal que reduce aún más la dimensionalidad
             nn.ReLU()# función de activación ReLU
@@ -17,8 +17,8 @@ class Autoencoder(nn.Module):
             nn.ReLU(), # función de activación ReLU
             nn.Linear(16, input_dim), # la segunda capa lineal que reconstruye la entrada original
         )
-def forward(self, x): #funcion de paso hacia adelante que recibe un tensor x
-    return self.decoder(self.encoder(x))  #paso hacia adelante, primero codifica y luego decodifica
+    def forward(self, x): #funcion de paso hacia adelante que recibe un tensor x
+        return self.decoder(self.encoder(x))  #paso hacia adelante, primero codifica y luego decodifica
 
 def train_autoencoder(model, data, epochs = 50, lr = 1e-3): # funcion para entrenar el autoencoder
     opti = torch.optim.Adam(model.parameters(), lr=lr)
@@ -36,13 +36,14 @@ def train_autoencoder(model, data, epochs = 50, lr = 1e-3): # funcion para entre
 
         if epoch % 10 == 0: # imprime la pérdida cada 10 épocas
             print(f'Epoch {epoch}, Loss: {loss.item():.5f}') # imprime la pérdida cada 10 épocas
+        return model # devuelve el modelo entrenado
 
 def anomaly_detection(model, data, umbral = None): #funcion para detectar anomalías
     model.eval()
 
     with torch.no_grad(): # desactiva el cálculo de gradientes para ahorrar memoria y tiempo
         rec = model(data) # reconstruye los datos de entrada
-        error = torch.mean((data - rec)**2, dim = 1).numpy() # calcula el error cuadrático medio 
+        error = torch.mean((data - rec)**2, dim = 1).cpu().numpy() # calcula el error cuadrático medio 
 
     if umbral is None: # si no se ha especificado un umbral, se calcula el percentil 95 del error
         umbral = np.percentile(error, 95) # umbral por defecto es el percentil 95 del error
@@ -50,15 +51,20 @@ def anomaly_detection(model, data, umbral = None): #funcion para detectar anomal
     return error, error > umbral, umbral # devuelve el error, un booleano indicando si es una anomalía y el umbral utilizado
     
 def proc_and_train(df):
+    if df.empty: # verifica si el dataframe está vacío
+        raise ValueError("El dataframe está vacío. Por favor, proporciona datos válidos.") # lanza un error si el dataframe está vacío
+    
     scaler = MinMaxScaler() #para normalizar los datos entre 0 y 1
     X = scaler.fit_transform(df) # normaliza los datos entre 0 y 1
     X_tensor = torch.tensor(X, dtype=torch.float32) # convierte el dataframe a un tensor de PyTorch
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # verifica si hay una GPU disponible y la usa, si no, usa la CPU
+
+    model = Autoencoder(X.shape[1]) # crea el modelo
     model.to(device) # mueve el modelo a la GPU si está disponible
     X_tensor = X_tensor.to(device) # mueve el tensor de entrada a la GPU si está disponible
 
-    model = Autoencoder(X.shape[1]) # crea el modelo
+    
     model = train_autoencoder(model, X_tensor) # entrena el modelo
 
     error, anomaly, umbral = anomaly_detection(model, X_tensor) # detecta anomalías
