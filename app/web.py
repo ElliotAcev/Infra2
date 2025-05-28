@@ -36,11 +36,11 @@ if archivo is not None:
             df_result, modelo, umbral = proc_and_train(df)
             df_anom = df_result[df_result["anomaly"] == True]
             df_norm = df_result[df_result["anomaly"] == False]
-            
+
             st.write("🧾 Columnas del dataset procesado:")
             st.write(df_result.columns.tolist())
 
-        with st.expander("ℹ️ ¿Qué significa cada columna?"):
+        with st.expander("¿Qué significa cada columna?"):
             for col in df_result.columns:
                 descripcion = columnas_info.get(col, "Descripción no disponible.")
                 st.markdown(f"**{col}:** {descripcion}")
