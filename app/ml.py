@@ -54,6 +54,10 @@ def proc_and_train(df):
     X = scaler.fit_transform(df) # normaliza los datos entre 0 y 1
     X_tensor = torch.tensor(X, dtype=torch.float32) # convierte el dataframe a un tensor de PyTorch
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # verifica si hay una GPU disponible y la usa, si no, usa la CPU
+    model.to(device) # mueve el modelo a la GPU si está disponible
+    X_tensor = X_tensor.to(device) # mueve el tensor de entrada a la GPU si está disponible
+
     model = Autoencoder(X.shape[1]) # crea el modelo
     model = train_autoencoder(model, X_tensor) # entrena el modelo
 
@@ -63,4 +67,4 @@ def proc_and_train(df):
     df_out['error']= error  # filtra el dataframe original para obtener las anomalías
     df_out['anomaly'] = anomaly  # añade una columna con las anomalías
 
-    return df_out, model, scaler
+    return df_out, model, scaler # devuelve el dataframe con las anomalías, el modelo entrenado y el escalador utilizado para normalizar los datos
