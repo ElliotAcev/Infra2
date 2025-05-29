@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  app-cpu:
+    build:
+      context: .
+      dockerfile: dockerfile.cpu
+    ports:
+      - "8501:8501"
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/
+
+  app-cuda:
+    build:
+      context: .
+      dockerfile: dockerfile.cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - MONGO_URI=mongodb://mongo:27017/
+    ports:
+      - "8502:8501"
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:6
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

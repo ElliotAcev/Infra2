@@ -170,3 +170,21 @@ if 'errores_antes' in locals() and 'df_result_antes' in locals():
     st.markdown("**Después del reentrenamiento**")
     fig2 = px.histogram(df_result, x="error", nbins=50)
     st.plotly_chart(fig2)
+
+    st.markdown("**Comparación del número de anomalías detectadas**")
+    anomalies_data = pd.DataFrame({
+        "Estado": ["Antes", "Después"],
+        "Anomalías": [df_result_antes["anomaly"].sum(), df_result["anomaly"].sum()]
+    })
+
+    fig3 = px.bar(anomalies_data, x="Estado", y="Anomalías", title="Cantidad de Anomalías Detectadas")
+    st.plotly_chart(fig3)
+
+    st.markdown("**Comparación del promedio de error**")
+    error_stats = pd.DataFrame({
+        "Estado": ["Antes", "Después"],
+        "Error Promedio": [np.mean(errores_antes), np.mean(df_result["error"])]
+    })
+
+    fig4 = px.bar(error_stats, x="Estado", y="Error Promedio", title="Error Promedio Antes vs Después")
+    st.plotly_chart(fig4)
