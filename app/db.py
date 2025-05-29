@@ -1,14 +1,9 @@
-import pymongo 
+from pymongo import MongoClient
 
 def get_db():
-    cliente = pymongo.MongoClient("mongodb://localhost:27017/")
-    db = cliente["NetWork"]
-    return db
+    client = MongoClient("mongodb://localhost:27017/")
+    return client["Network"]  # Asegúrate que sea exactamente "Network" como ya está creada
 
-def save_results(db, coleccion, datos):
-    try:
-        resultado = db[coleccion].insert_many(datos)
-        print("Guardados {len(resultado.inserted_ids)} documentos en la colección '{Anomalos}'.")
-    except Exception as e:
-        print(f"error al guardar: ", e)
-
+def save_results(db, collection_name, data):
+    if data:
+        db[collection_name].insert_many(data)

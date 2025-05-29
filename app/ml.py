@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import os
+import joblib
 from sklearn.preprocessing import MinMaxScaler
 
 class Autoencoder(nn.Module):
@@ -20,7 +22,15 @@ class Autoencoder(nn.Module):
     def forward(self, x): #funcion de paso hacia adelante que recibe un tensor x
         return self.decoder(self.encoder(x))  #paso hacia adelante, primero codifica y luego decodifica
 
-def train_autoencoder(model, data, epochs = 50, lr = 1e-3): # funcion para entrenar el autoencoder
+def save_model(model, path = 'autoencoder.pth'): # funcion para guardar el modelo
+    torch.save(model.state_dict(), path)  # guarda el estado del modelo en un archivo especificado por path
+
+def load_model(input_dim, path = 'autoencoder.pth'): # funcion para cargar el modelo
+    model = Autoencoder(input_dim)  # crea una instancia del modelo Autoencoder con la dimensión de entrada especificada
+    model.load_state_dict(torch.load(path))  # carga el estado del modelo desde el archivo especificado por path
+    return model  # devuelve el modelo cargado
+
+def train_autoencoder(model, data, epochs = 100, lr = 1e-3): # funcion para entrenar el autoencoder
     opti = torch.optim.Adam(model.parameters(), lr=lr)
     crit = nn.MSELoss()
 
@@ -36,7 +46,7 @@ def train_autoencoder(model, data, epochs = 50, lr = 1e-3): # funcion para entre
 
         if epoch % 10 == 0: # imprime la pérdida cada 10 épocas
             print(f'Epoch {epoch}, Loss: {loss.item():.5f}') # imprime la pérdida cada 10 épocas
-        return model # devuelve el modelo entrenado
+    return model # devuelve el modelo entrenado
 
 def anomaly_detection(model, data, umbral = None): #funcion para detectar anomalías
     model.eval()
@@ -49,28 +59,82 @@ def anomaly_detection(model, data, umbral = None): #funcion para detectar anomal
         umbral = np.percentile(error, 95) # umbral por defecto es el percentil 95 del error
 
     return error, error > umbral, umbral # devuelve el error, un booleano indicando si es una anomalía y el umbral utilizado
-    
-def proc_and_train(df):
-    if df.empty: # verifica si el dataframe está vacío
-        raise ValueError("El dataframe está vacío. Por favor, proporciona datos válidos.") # lanza un error si el dataframe está vacío
-    
-    scaler = MinMaxScaler() #para normalizar los datos entre 0 y 1
-    X = scaler.fit_transform(df) # normaliza los datos entre 0 y 1
-    X_tensor = torch.tensor(X, dtype=torch.float32) # convierte el dataframe a un tensor de PyTorch
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # verifica si hay una GPU disponible y la usa, si no, usa la CPU
+ModelP = 'autoencoder.pth' # ruta del modelo guardado 
+scalerP = 'scaler.pkl' # ruta del scaler guardado
 
-    model = Autoencoder(X.shape[1]) # crea el modelo
+def save_scaler(scaler, path = scalerP): # funcion para guardar el scaler
+    joblib.dump(scaler, path)  # guarda el scaler en un archivo especificado por path
+def load_scaler(path = scalerP): # funcion para cargar el scaler
+    return joblib.load(path)  # carga el scaler desde el archivo especificado por path
+
+def proc_and_train(df): # Procesa los datos y entrena el modelo de autoencoder
+    if df.empty: # verifica si el dataframe está vacío  
+        raise ValueError("El dataframe está vacío. Por favor, proporciona datos válidos.") # verifica si el dataframe está vacío
+    
+    scaler = MinMaxScaler() # crea una instancia del escalador MinMaxScaler
+    X = scaler.fit_transform(df) # ajusta el escalador a los datos y transforma los datos a un rango entre 0 y 1
+    X_tensor = torch.tensor(X, dtype=torch.float32) # convierte los datos a un tensor de PyTorch de tipo float32
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # verifica si hay una GPU disponible y usa CUDA si es así, de lo contrario usa CPU
+    X_tensor = X_tensor.to(device) # mueve el tensor a la GPU si está disponible
+
+    # Entrena desde cero para esta sesión de análisis
+    model = Autoencoder(X.shape[1]) #  crea una instancia del modelo Autoencoder con la dimensión de entrada igual al número de columnas del dataframe
     model.to(device) # mueve el modelo a la GPU si está disponible
-    X_tensor = X_tensor.to(device) # mueve el tensor de entrada a la GPU si está disponible
+    model = train_autoencoder(model, X_tensor) # entrena el modelo con los datos de entrada
 
-    
-    model = train_autoencoder(model, X_tensor) # entrena el modelo
+    save_model(model, ModelP)
+    save_scaler(scaler, scalerP)
 
-    error, anomaly, umbral = anomaly_detection(model, X_tensor) # detecta anomalías
+    error, anomaly, umbral = anomaly_detection(model, X_tensor) # detecta anomalías en los datos de entrada utilizando el modelo entrenado
 
-    df_out = df.copy() # crea una copia del dataframe original
-    df_out['error']= error  # filtra el dataframe original para obtener las anomalías
-    df_out['anomaly'] = anomaly  # añade una columna con las anomalías
+    df_out = df.copy()
+    df_out['error'] = error
+    df_out['anomaly'] = anomaly
 
-    return df_out, model, scaler # devuelve el dataframe con las anomalías, el modelo entrenado y el escalador utilizado para normalizar los datos
+    return df_out, model, scaler, error
+
+def retrain_model(df):
+    if df.empty:
+        raise ValueError("El dataframe está vacío. Por favor, proporciona datos válidos.")
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if os.path.exists(scalerP):
+        scaler = load_scaler(scalerP)
+
+        # Detectar cambio en cantidad de columnas
+        if scaler.n_features_in_ != df.shape[1]:
+            print("⚠️ Número de columnas diferente. Reentrenando desde cero.")
+            scaler = MinMaxScaler()
+            X = scaler.fit_transform(df)
+            save_scaler(scaler, scalerP)
+
+            model = Autoencoder(X.shape[1])
+            model.to(device)
+            X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
+            model = train_autoencoder(model, X_tensor)
+            save_model(model, ModelP)
+
+            return model, scaler
+        else:
+            X = scaler.transform(df)
+    else:
+        scaler = MinMaxScaler()
+        X = scaler.fit_transform(df)
+        save_scaler(scaler, scalerP)
+
+    X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
+
+    if os.path.exists(ModelP):
+        model = load_model(X.shape[1], ModelP)
+        model.to(device)
+    else:
+        model = Autoencoder(X.shape[1])
+        model.to(device)
+
+    model = train_autoencoder(model, X_tensor)
+    save_model(model, ModelP)
+
+    return model, scaler
